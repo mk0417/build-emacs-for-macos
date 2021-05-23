@@ -72,14 +72,14 @@ available here: https://github.com/emacs-mirror/emacs
 Options:
     -j, --parallel COUNT             Compile using COUNT parallel processes (detected: 8)
         --git-sha SHA                Override detected git SHA of specified branch allowing builds of old commits
-        --[no-]xwidgets              Enable/disable XWidgets (default: enabled if supported)
+        --[no-]xwidgets              Enable/disable XWidgets if supported (default: enabled)
         --[no-]native-comp           Enable/disable native-comp (default: enabled if supported)
         --[no-]native-full-aot       Enable/disable NATIVE_FULL_AOT / Ahead of Time compilation (default: disabled)
-        --rsvg                       Enable SVG image support via librsvg, can yield a unstable build (default: disabled)
+        --[no-]rsvg                  Enable/disable SVG image support via librsvg (default: enabled)
         --no-titlebar                Apply no-titlebar patch (default: disabled)
         --no-frame-refocus           Apply no-frame-refocus patch (default: disabled)
-        --[no-]native-fast-boot      DEPRECATED: use --[no-]native-full-aot instead
-        --[no-]launcher              DEPRECATED: Launcher script is no longer used.
+        --work-dir DIR               Specify a working directory where tarballs, sources, and builds will be stored and worked with
+        --plan FILE                  Follow given plan file, instead of using given git ref/sha
 ```
 
 Resulting applications are saved to the `builds` directory in a bzip2 compressed
@@ -111,29 +111,25 @@ All sources as downloaded as tarballs from the
 to get a list of tags/branches available to install, simply check said
 repository.
 
-## Use Self-Contained Emacs.app as `emacs` CLI Tool
+## Use Emacs.app as `emacs` CLI Tool
 
-As the application bundle is self-contained, the main executable needs to be run
-from within the application bundle. This means a simple symlink to
-`Emacs.app/Contents/MacOS/Emacs` will not work. Instead the best approach is to
-create a shell alias called `emacs` pointing to the right place.
+Builds come with a custom `emacs` shell script launcher for use from the command
+line. It makes sure to use the main `Emacs.app/Contents/MacOS/Emacs` executable
+from the correct path, ensuring it finds all the relevant dependencies within
+the Emacs.app bundle.
 
-Personally I use something similar to this:
+To use it, simply add `Emacs.app/Contents/MacOS/bin` to your `PATH`. For
+example, if you place Emacs.app in `/Applications`:
 
 ```bash
-if [ -f "/Applications/Emacs.app/Contents/MacOS/Emacs" ]; then
-  export EMACS="/Applications/Emacs.app/Contents/MacOS/Emacs"
-  alias emacs="$EMACS -nw"
-fi
-
-if [ -f "/Applications/Emacs.app/Contents/MacOS/bin/emacsclient" ]; then
-  alias emacsclient="/Applications/Emacs.app/Contents/MacOS/bin/emacsclient"
+if [ -d "/Applications/Emacs.app/Contents/MacOS/bin" ]; then
+  export PATH="/Applications/Emacs.app/Contents/MacOS/bin:$PATH"
+  alias emacs="emacs -nw" # Always launch "emacs" in terminal mode.
 fi
 ```
 
-Setting the `EMACS` variable to the binary path seems to be a good idea, as some
-tools seems to use it to figure out the path to Emacs' executable, including
-[doom-emacs](https://github.com/hlissner/doom-emacs)' `doom` CLI tool.
+If you want `emacs` in your terminal to launch a GUI instance of Emacs, don't
+use the alias from the above example.
 
 ## Native-Comp
 
@@ -142,9 +138,9 @@ _Note: On 2021-04-25 the `feature/native-comp` branch was
 into `master`._
 
 The build script will automatically detect if the source tree being built
-supports native-compilation, and enable it if available. You can override this
-to force it on/off by passing `--native-comp` or `--no-native-comp`
-respectfully.
+supports native-compilation, and enable it if available. You can override the
+auto-detection logic to force enable or force disable native-compilation by
+passing `--native-comp` or `--no-native-comp` respectfully.
 
 By default `NATIVE_FULL_AOT` is disabled which ensures a fast build by native
 compiling as few elisp source files as possible to build Emacs itself. Any
@@ -152,30 +148,37 @@ remaining elisp files will be dynamically compiled in the background the first
 time they are used.
 
 To enable native full Ahead-of-Time compilation, pass in the `--native-full-aot`
-option, which will native-compile all of Emacs' elisp as built-time. On my
+option, which will native-compile all of Emacs' elisp at built-time. On my
 machine it takes around 10 minutes to build Emacs.app with `NATIVE_FULL_AOT`
 disabled, and around 20-25 minutes with it enabled.
 
 ### Configuration
 
-Add the following near the top of your `early-init.el` or `init.el`:
-
-```elisp
-(setq comp-speed 2)
-```
+#### Native-Lisp Cache Directory
 
 By default natively compiled `*.eln` files will be cached in
 `~/.emacs.d/eln-cache/`. If you want to customize that, simply set a new path as
-the first element of the `comp-eln-load-path` variable. The path string must end
-with a `/`.
+the first element of the `native-comp-eln-load-path` variable. The path string
+must end with a `/`.
 
 Below is an example which stores all compiled `*.eln` files in `cache/eln-cache`
 within your Emacs configuration directory:
 
 ```elisp
-(when (boundp 'comp-eln-load-path)
-  (setcar comp-eln-load-path
+(when (boundp 'native-comp-eln-load-path)
+  (setcar native-comp-eln-load-path
           (expand-file-name "cache/eln-cache/" user-emacs-directory)))
+```
+
+#### Compilation Warnings
+
+By default any warnings encountered during async native compilation will pop up
+a warnings buffer. As this tends to happen rather frequently with a lot of
+packages, it can get annoying. You can disable showing these warnings by setting
+`native-comp-async-report-warnings-errors` to `nil`:
+
+```elisp
+(setq native-comp-async-report-warnings-errors nil)
 ```
 
 ### Issues
@@ -188,7 +191,7 @@ types of issues and or behavior you can expect.
 ### Known Good Commits/Builds
 
 A list of known "good" commits which produce working builds is tracked in:
-[#6 Known good commits of feature/native-comp branch](https://github.com/jimeh/build-emacs-for-macos/issues/6)
+[#6 Known good commits for native-comp](https://github.com/jimeh/build-emacs-for-macos/issues/6)
 
 ## Credits
 
